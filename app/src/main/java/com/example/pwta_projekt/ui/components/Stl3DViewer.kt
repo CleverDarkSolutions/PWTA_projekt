@@ -1,5 +1,6 @@
 package com.example.pwta_projekt.ui.components
 
+import android.opengl.GLSurfaceView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ fun Stl3DViewer(
         factory = {
             StlGLSurfaceView(context, gestureHandler).apply {
                 setRenderer(renderer)
+                renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             }
         },
         onRelease = { glSurfaceView ->

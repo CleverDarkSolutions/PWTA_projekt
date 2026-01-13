@@ -9,7 +9,6 @@ class StlGLSurfaceView(context: Context, private val gestureHandler: GestureHand
 
     init {
         setEGLContextClientVersion(2)
-        renderMode = RENDERMODE_CONTINUOUSLY
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

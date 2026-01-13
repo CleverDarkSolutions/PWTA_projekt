@@ -1,5 +1,6 @@
 package com.example.pwta_projekt.data.parsers
 
+import android.util.Log
 import com.example.pwta_projekt.domain.models.Bounds2D
 import com.example.pwta_projekt.domain.models.DxfEntity
 import com.example.pwta_projekt.domain.models.Model2D
@@ -40,14 +41,46 @@ class DxfParser {
             }
 
             if (inEntitiesSection && code == "0") {
-                when (value) {
-                    "LINE" -> entities.add(parseLine(lines, i))
-                    "ARC" -> entities.add(parseArc(lines, i))
-                    "CIRCLE" -> entities.add(parseCircle(lines, i))
-                    "POLYLINE" -> entities.add(parsePolyline(lines, i))
-                    "LWPOLYLINE" -> entities.add(parseLwPolyline(lines, i))
+                try {
+                    when (value) {
+                        "LINE" -> {
+                            Log.d("DxfParser", "Parsing LINE at line $i")
+                            entities.add(parseLine(lines, i))
+                        }
+                        "ARC" -> {
+                            Log.d("DxfParser", "Parsing ARC at line $i")
+                            entities.add(parseArc(lines, i))
+                        }
+                        "CIRCLE" -> {
+                            Log.d("DxfParser", "Parsing CIRCLE at line $i")
+                            entities.add(parseCircle(lines, i))
+                        }
+                        "POLYLINE" -> {
+                            Log.d("DxfParser", "Parsing POLYLINE at line $i")
+                            entities.add(parsePolyline(lines, i))
+                        }
+                        "LWPOLYLINE" -> {
+                            Log.d("DxfParser", "Parsing LWPOLYLINE at line $i")
+                            entities.add(parseLwPolyline(lines, i))
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("DxfParser", "Error parsing entity $value at line $i: ${e.message}")
                 }
             }
+        }
+
+        Log.d("DxfParser", "Parsed ${entities.size} entities")
+
+        if (entities.isEmpty()) {
+            Log.w("DxfParser", "No entities found in DXF file")
+            // Return a default model with a simple line for visualization
+            return Model2D(
+                entities = listOf(
+                    DxfEntity.Line(Point2D(0f, 0f), Point2D(100f, 100f))
+                ),
+                bounds = Bounds2D(0f, 100f, 0f, 100f)
+            )
         }
 
         val bounds = calculateBounds(entities)
@@ -250,6 +283,13 @@ class DxfParser {
             }
         }
 
+        // Validate bounds
+        if (minX == Float.MAX_VALUE || maxX == Float.MIN_VALUE) {
+            Log.w("DxfParser", "Invalid bounds after calculation, using defaults")
+            return Bounds2D(0f, 100f, 0f, 100f)
+        }
+
+        Log.d("DxfParser", "Bounds: ($minX, $minY) to ($maxX, $maxY)")
         return Bounds2D(minX, maxX, minY, maxY)
     }
 }

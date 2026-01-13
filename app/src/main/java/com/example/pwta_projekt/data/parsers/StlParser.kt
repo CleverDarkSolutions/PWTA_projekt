@@ -14,32 +14,41 @@ class StlParser {
     }
 
     fun parse(inputStream: InputStream): Model3D {
-        val bufferedStream = inputStream.buffered()
-        bufferedStream.mark(6)
+        // Read all bytes first
+        val allBytes = inputStream.readBytes()
 
-        val format = detectFormat(bufferedStream)
-        bufferedStream.reset()
+        if (allBytes.size < 84) {
+            throw IllegalArgumentException("STL file too small: ${allBytes.size} bytes")
+        }
+
+        val format = detectFormat(allBytes)
 
         return when (format) {
-            StlFormat.ASCII -> parseAscii(bufferedStream)
-            StlFormat.BINARY -> parseBinary(bufferedStream)
+            StlFormat.ASCII -> parseAscii(allBytes)
+            StlFormat.BINARY -> parseBinary(allBytes)
         }
     }
 
-    private fun detectFormat(stream: InputStream): StlFormat {
-        val header = ByteArray(5)
-        stream.read(header)
-        val headerStr = String(header, Charsets.US_ASCII)
-
-        return if (headerStr.equals("solid", ignoreCase = true)) {
-            StlFormat.ASCII
-        } else {
-            StlFormat.BINARY
+    private fun detectFormat(data: ByteArray): StlFormat {
+        // Check if file starts with "solid"
+        if (data.size >= 5) {
+            val header = String(data, 0, 5, Charsets.US_ASCII)
+            if (header.equals("solid", ignoreCase = true)) {
+                // Could be ASCII, but binary files can also have "solid" in header
+                // Try to validate by checking if it contains "facet" and "vertex"
+                val firstPart = String(data, 0, minOf(1024, data.size), Charsets.US_ASCII)
+                if (firstPart.contains("facet", ignoreCase = true) &&
+                    firstPart.contains("vertex", ignoreCase = true)) {
+                    return StlFormat.ASCII
+                }
+            }
         }
+
+        // Default to binary
+        return StlFormat.BINARY
     }
 
-    private fun parseBinary(stream: InputStream): Model3D {
-        val allBytes = stream.readBytes()
+    private fun parseBinary(allBytes: ByteArray): Model3D {
         val buffer = ByteBuffer.wrap(allBytes).order(ByteOrder.LITTLE_ENDIAN)
 
         // Skip 80-byte header
@@ -47,6 +56,10 @@ class StlParser {
 
         // Read triangle count
         val triangleCount = buffer.int
+
+        if (triangleCount <= 0 || triangleCount > 10000000) {
+            throw IllegalArgumentException("Invalid triangle count: $triangleCount")
+        }
 
         val vertices = mutableListOf<Float>()
         val normals = mutableListOf<Float>()
@@ -102,8 +115,9 @@ class StlParser {
         )
     }
 
-    private fun parseAscii(stream: InputStream): Model3D {
-        val reader = BufferedReader(InputStreamReader(stream))
+    private fun parseAscii(allBytes: ByteArray): Model3D {
+        val text = String(allBytes, Charsets.UTF_8)
+        val lines = text.lines()
         val vertices = mutableListOf<Float>()
         val normals = mutableListOf<Float>()
         var triangleCount = 0
@@ -117,52 +131,50 @@ class StlParser {
 
         var currentNormal: Triple<Float, Float, Float>? = null
 
-        reader.useLines { lines ->
-            lines.forEach { line ->
-                val trimmed = line.trim()
+        lines.forEach { line ->
+            val trimmed = line.trim()
 
-                when {
-                    trimmed.startsWith("facet normal") -> {
-                        val parts = trimmed.split("\\s+".toRegex())
-                        if (parts.size >= 5) {
-                            val nx = parts[2].toFloatOrNull() ?: 0f
-                            val ny = parts[3].toFloatOrNull() ?: 0f
-                            val nz = parts[4].toFloatOrNull() ?: 0f
-                            currentNormal = Triple(nx, ny, nz)
+            when {
+                trimmed.startsWith("facet normal") -> {
+                    val parts = trimmed.split("\\s+".toRegex())
+                    if (parts.size >= 5) {
+                        val nx = parts[2].toFloatOrNull() ?: 0f
+                        val ny = parts[3].toFloatOrNull() ?: 0f
+                        val nz = parts[4].toFloatOrNull() ?: 0f
+                        currentNormal = Triple(nx, ny, nz)
+                    }
+                }
+
+                trimmed.startsWith("vertex") -> {
+                    val parts = trimmed.split("\\s+".toRegex())
+                    if (parts.size >= 4) {
+                        val x = parts[1].toFloatOrNull() ?: 0f
+                        val y = parts[2].toFloatOrNull() ?: 0f
+                        val z = parts[3].toFloatOrNull() ?: 0f
+
+                        vertices.add(x)
+                        vertices.add(y)
+                        vertices.add(z)
+
+                        currentNormal?.let { (nx, ny, nz) ->
+                            normals.add(nx)
+                            normals.add(ny)
+                            normals.add(nz)
                         }
+
+                        // Update bounds
+                        minX = minOf(minX, x)
+                        maxX = maxOf(maxX, x)
+                        minY = minOf(minY, y)
+                        maxY = maxOf(maxY, y)
+                        minZ = minOf(minZ, z)
+                        maxZ = maxOf(maxZ, z)
                     }
+                }
 
-                    trimmed.startsWith("vertex") -> {
-                        val parts = trimmed.split("\\s+".toRegex())
-                        if (parts.size >= 4) {
-                            val x = parts[1].toFloatOrNull() ?: 0f
-                            val y = parts[2].toFloatOrNull() ?: 0f
-                            val z = parts[3].toFloatOrNull() ?: 0f
-
-                            vertices.add(x)
-                            vertices.add(y)
-                            vertices.add(z)
-
-                            currentNormal?.let { (nx, ny, nz) ->
-                                normals.add(nx)
-                                normals.add(ny)
-                                normals.add(nz)
-                            }
-
-                            // Update bounds
-                            minX = minOf(minX, x)
-                            maxX = maxOf(maxX, x)
-                            minY = minOf(minY, y)
-                            maxY = maxOf(maxY, y)
-                            minZ = minOf(minZ, z)
-                            maxZ = maxOf(maxZ, z)
-                        }
-                    }
-
-                    trimmed == "endfacet" -> {
-                        triangleCount++
-                        currentNormal = null
-                    }
+                trimmed == "endfacet" -> {
+                    triangleCount++
+                    currentNormal = null
                 }
             }
         }
