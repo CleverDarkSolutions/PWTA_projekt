@@ -8,7 +8,6 @@ import com.example.pwta_projekt.domain.models.Point2D
 import java.io.BufferedReader
 import java.io.InputStream
 import java.io.InputStreamReader
-import kotlin.math.PI
 
 class DxfParser {
     fun parse(inputStream: InputStream): Model2D {
@@ -134,11 +133,8 @@ class DxfParser {
             i += 2
         }
 
-        // Convert degrees to radians
-        val startRad = (startAngle * PI / 180).toFloat()
-        val endRad = (endAngle * PI / 180).toFloat()
-
-        return DxfEntity.Arc(Point2D(cx, cy), radius, startRad, endRad)
+        // DXF stores angles in degrees, keep them as degrees (Canvas API expects degrees)
+        return DxfEntity.Arc(Point2D(cx, cy), radius, startAngle, endAngle)
     }
 
     private fun parseCircle(lines: List<String>, startIndex: Int): DxfEntity.Circle {
