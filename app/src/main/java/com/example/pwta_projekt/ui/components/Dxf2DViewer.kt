@@ -74,15 +74,6 @@ fun Dxf2DViewer(
         // Draw white background first
         drawRect(color = Color.White, size = size)
 
-        // TEST: Simple lines to confirm Canvas is working
-        drawLine(
-            color = Color.Red,
-            start = Offset(100f, 100f),
-            end = Offset(500f, 500f),
-            strokeWidth = 5f
-        )
-        Log.d("Dxf2DViewer", "Drew red test line")
-
         // Draw DXF model with simple scaling - no rotation, no complex transforms
         val modelWidth = model2D.bounds.width
         val modelHeight = model2D.bounds.height
@@ -103,12 +94,11 @@ fun Dxf2DViewer(
                     val x2 = (entity.end.x - model2D.bounds.minX) * fitScale + (canvasWidth - modelWidth * fitScale) / 2f
                     val y2 = (entity.end.y - model2D.bounds.minY) * fitScale + (canvasHeight - modelHeight * fitScale) / 2f
 
-                    Log.d("Dxf2DViewer", "Line: ($x1,$y1) -> ($x2,$y2)")
                     drawLine(
-                        color = Color.Blue,
+                        color = Color.Black,
                         start = Offset(x1, y1),
                         end = Offset(x2, y2),
-                        strokeWidth = 3f
+                        strokeWidth = 2f
                     )
                 }
 
@@ -117,115 +107,88 @@ fun Dxf2DViewer(
                     val cy = (entity.center.y - model2D.bounds.minY) * fitScale + (canvasHeight - modelHeight * fitScale) / 2f
                     val r = entity.radius * fitScale
 
-                    Log.d("Dxf2DViewer", "Circle: center($cx,$cy) r=$r")
                     drawCircle(
-                        color = Color.Blue,
+                        color = Color.Black,
                         center = Offset(cx, cy),
                         radius = r,
-                        style = Stroke(width = 3f)
+                        style = Stroke(width = 2f)
                     )
                 }
 
                 is DxfEntity.Arc -> {
-                    // Skip arcs for now - focus on basic shapes
+                    val cx = (entity.center.x - model2D.bounds.minX) * fitScale + (canvasWidth - modelWidth * fitScale) / 2f
+                    val cy = (entity.center.y - model2D.bounds.minY) * fitScale + (canvasHeight - modelHeight * fitScale) / 2f
+                    val r = entity.radius * fitScale
+
+                    val rect = Rect(
+                        left = cx - r,
+                        top = cy - r,
+                        right = cx + r,
+                        bottom = cy + r
+                    )
+
+                    var sweepAngle = entity.endAngle - entity.startAngle
+                    if (sweepAngle < 0) sweepAngle += 360f
+
+                    drawArc(
+                        color = Color.Black,
+                        startAngle = entity.startAngle,
+                        sweepAngle = sweepAngle,
+                        useCenter = false,
+                        topLeft = rect.topLeft,
+                        size = rect.size,
+                        style = Stroke(width = 2f)
+                    )
                 }
 
                 is DxfEntity.Polyline -> {
-                    // Skip polylines for now
+                    if (entity.points.isNotEmpty()) {
+                        val path = Path()
+                        val first = entity.points.first()
+                        val fx = (first.x - model2D.bounds.minX) * fitScale + (canvasWidth - modelWidth * fitScale) / 2f
+                        val fy = (first.y - model2D.bounds.minY) * fitScale + (canvasHeight - modelHeight * fitScale) / 2f
+                        path.moveTo(fx, fy)
+
+                        entity.points.drop(1).forEach { point ->
+                            val px = (point.x - model2D.bounds.minX) * fitScale + (canvasWidth - modelWidth * fitScale) / 2f
+                            val py = (point.y - model2D.bounds.minY) * fitScale + (canvasHeight - modelHeight * fitScale) / 2f
+                            path.lineTo(px, py)
+                        }
+
+                        if (entity.closed) path.close()
+
+                        drawPath(
+                            path = path,
+                            color = Color.Black,
+                            style = Stroke(width = 2f)
+                        )
+                    }
                 }
 
                 is DxfEntity.LwPolyline -> {
-                    // Skip polylines for now
+                    if (entity.points.isNotEmpty()) {
+                        val path = Path()
+                        val first = entity.points.first()
+                        val fx = (first.x - model2D.bounds.minX) * fitScale + (canvasWidth - modelWidth * fitScale) / 2f
+                        val fy = (first.y - model2D.bounds.minY) * fitScale + (canvasHeight - modelHeight * fitScale) / 2f
+                        path.moveTo(fx, fy)
+
+                        entity.points.drop(1).forEach { point ->
+                            val px = (point.x - model2D.bounds.minX) * fitScale + (canvasWidth - modelWidth * fitScale) / 2f
+                            val py = (point.y - model2D.bounds.minY) * fitScale + (canvasHeight - modelHeight * fitScale) / 2f
+                            path.lineTo(px, py)
+                        }
+
+                        if (entity.closed) path.close()
+
+                        drawPath(
+                            path = path,
+                            color = Color.Black,
+                            style = Stroke(width = 2f)
+                        )
+                    }
                 }
             }
         }
     }
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawArc(
-    color: Color,
-    entity: DxfEntity.Arc,
-    strokeWidth: Float
-) {
-    val cx = entity.center.x
-    val cy = entity.center.y
-    val radius = entity.radius
-
-    val rect = Rect(
-        left = cx - radius,
-        top = cy - radius,
-        right = cx + radius,
-        bottom = cy + radius
-    )
-
-    // Angles are already in degrees (no conversion needed)
-    val startAngleDegrees = entity.startAngle
-    var sweepAngleDegrees = entity.endAngle - entity.startAngle
-
-    // Handle wrap-around: if sweep is negative, add 360 to get the positive sweep
-    if (sweepAngleDegrees < 0) {
-        sweepAngleDegrees += 360f
-    }
-
-    drawArc(
-        color = color,
-        startAngle = startAngleDegrees,
-        sweepAngle = sweepAngleDegrees,
-        useCenter = false,
-        topLeft = rect.topLeft,
-        size = rect.size,
-        style = Stroke(width = strokeWidth)
-    )
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPolyline(
-    color: Color,
-    entity: DxfEntity.Polyline,
-    strokeWidth: Float
-) {
-    if (entity.points.isEmpty()) return
-
-    val path = Path()
-    val first = entity.points.first()
-    path.moveTo(first.x, first.y)
-
-    entity.points.drop(1).forEach { point ->
-        path.lineTo(point.x, point.y)
-    }
-
-    if (entity.closed && entity.points.size > 1) {
-        path.close()
-    }
-
-    drawPath(
-        path = path,
-        color = color,
-        style = Stroke(width = strokeWidth)
-    )
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawLwPolyline(
-    color: Color,
-    entity: DxfEntity.LwPolyline,
-    strokeWidth: Float
-) {
-    if (entity.points.isEmpty()) return
-
-    val path = Path()
-    val first = entity.points.first()
-    path.moveTo(first.x, first.y)
-
-    entity.points.drop(1).forEach { point ->
-        path.lineTo(point.x, point.y)
-    }
-
-    if (entity.closed && entity.points.size > 1) {
-        path.close()
-    }
-
-    drawPath(
-        path = path,
-        color = color,
-        style = Stroke(width = strokeWidth)
-    )
 }
